@@ -192,10 +192,8 @@ def setup_faction_leaderboard_daily_commands(tree: app_commands.CommandTree, sto
             "",
             f"Most attacks: {fmt_row(overall.get('most_attacks'), '{} - `{}`')}",
             f"Most mugs: {fmt_row(overall.get('most_mugs'), '{} - `{}`')}",
-            f"Most hospitals: {fmt_row(overall.get('most_hosp'), '{} - `{}`')}",
             f"Most respect gained: {fmt_row(overall.get('most_rg'), '{} - `{:+.2f}`')}",
-            "Total mugged: unavailable (API)",
-            "Best single mug amount: unavailable (API)",
+            "",
         ]
         tracked_since = overall.get("tracked_since")
         if tracked_since:
@@ -206,9 +204,9 @@ def setup_faction_leaderboard_daily_commands(tree: app_commands.CommandTree, sto
             except Exception:
                 overall_lines.append(f"Tracked since: {tracked_since}")
         if overall.get("backfill_done"):
-            overall_lines.append("Backfill status: complete")
+            overall_lines.append("Backfill from faction data complete")
         else:
-            overall_lines.append("Backfill status: in progress (overall may be partial)")
+            overall_lines.append("Backfill status (in progress)")
 
         if today_error:
             today_lines = [
@@ -224,13 +222,11 @@ def setup_faction_leaderboard_daily_commands(tree: app_commands.CommandTree, sto
                 f"Most mugs: {profile_link(most_mugs_id)} - `{most_mugs['mugs']}`",
                 f"Most hospitals: {profile_link(most_hosp_id)} - `{most_hosp['hosp']}`",
                 f"Most respect gained: {profile_link(most_rg_id)} - `{most_rg['rg']:+.2f}`",
-                "Total mugged: unavailable (API)",
-                "Best single mug amount: unavailable (API)",
             ]
 
         if sync_error:
             overall_lines.append("")
-            overall_lines.append(f"Overall sync note: {sync_error}")
+            overall_lines.append(f"Sync note: {sync_error}")
 
         msg_lines = overall_lines + [""] + today_lines
 
