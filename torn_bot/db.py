@@ -21,6 +21,28 @@ CREATE TABLE IF NOT EXISTS global_keys (
   encrypted_key TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS faction_attacks_seen (
+  attack_id INTEGER PRIMARY KEY,
+  attacker_id INTEGER NOT NULL,
+  started INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS faction_leaderboard_totals (
+  attacker_id INTEGER PRIMARY KEY,
+  attacks INTEGER NOT NULL DEFAULT 0,
+  mugs INTEGER NOT NULL DEFAULT 0,
+  hosp INTEGER NOT NULL DEFAULT 0,
+  respect_gain REAL NOT NULL DEFAULT 0,
+  respect_loss REAL NOT NULL DEFAULT 0,
+  mugged REAL NOT NULL DEFAULT 0,
+  best_mug REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS faction_leaderboard_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 """
 
 

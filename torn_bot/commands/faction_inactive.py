@@ -83,7 +83,7 @@ def setup_faction_inactive_commands(tree: app_commands.CommandTree, storage: Key
             return f"[{name} [{tid}]](https://www.torn.com/profiles.php?XID={tid})"
 
         lines = [
-            f"• {profile_link(name, tid)} — {rel}"
+            f"• {profile_link(name, tid)} - {rel}"
             for _, tid, name, rel in inactive
         ]
 
