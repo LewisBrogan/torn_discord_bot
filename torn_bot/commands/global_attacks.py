@@ -17,8 +17,6 @@ from torn_bot.api.torn_v2 import TornAPIError
 from torn_bot.services.faction_attacks import (
     fetch_today_faction_attacks,
     fetch_faction_attacks_since,
-    fmt_time_london,
-    result_tag,
 )
 from torn_bot.services.name_resolver import resolve_names
 
@@ -75,23 +73,6 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
             except Exception:
                 return 0
 
-        def defender_id(a: dict) -> int:
-            try:
-                return int((a.get("defender") or {}).get("id", 0) or 0)
-            except Exception:
-                return 0
-
-        def extract_ids(items: list[dict]) -> set[int]:
-            out: set[int] = set()
-            for a in items:
-                ai = attacker_id(a)
-                di = defender_id(a)
-                if ai:
-                    out.add(ai)
-                if di:
-                    out.add(di)
-            return out
-
         def profile_link(name: str, tid: int) -> str:
             return f"[{name} [{tid}]](https://www.torn.com/profiles.php?XID={tid})"
 
@@ -116,9 +97,6 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
                 mugs.append(a)
             else:
                 other.append(a)
-
-        mugs_sorted = sorted(mugs, key=lambda x: to_float(x.get("respect_gain", 0)), reverse=True)
-        other_sorted = sorted(other, key=lambda x: to_float(x.get("respect_gain", 0)), reverse=True)
 
         now_utc = datetime.now(timezone.utc)
         since_24h = int((now_utc - timedelta(hours=24)).timestamp())
@@ -147,15 +125,11 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
         top24 = top_respect_earners(attacks_24h, top_n=5)
         top7d = top_respect_earners(attacks_7d, top_n=5)
 
-        ids_to_resolve = set()
-        ids_to_resolve |= extract_ids(hosp)
-        ids_to_resolve |= extract_ids(mugs_sorted[:10])
-        ids_to_resolve |= extract_ids(other_sorted[:10])
-        ids_to_resolve |= {tid for tid, _ in top24}
+        ids_to_resolve = {tid for tid, _ in top24}
         ids_to_resolve |= {tid for tid, _ in top7d}
 
         seeded: dict[int, str] = {}
-        for group in (today_attacks, attacks_24h, attacks_7d):
+        for group in (attacks_24h, attacks_7d):
             for a in group:
                 for side in ("attacker", "defender"):
                     p = a.get(side) or {}
@@ -183,86 +157,35 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
                 return profile_link(nm, tid)
             return f"`{tid}`"
 
-        def fmt_attack_line(a: dict) -> str:
-            st = int(a.get("started", 0) or 0)
-            t = fmt_time_london(st)[:5]
-
-            tag = result_tag(safe_str(a.get("result", "")))
-            aid = a.get("id", "?")
-
-            rg = to_float(a.get("respect_gain", 0))
-            rl = to_float(a.get("respect_loss", 0))
-
-            a_id = attacker_id(a)
-            d_id = defender_id(a)
-
-            return (
-                f"{t} `[{tag}]` `#{aid}` `{rg:+.2f}/{-rl:+.2f}` "
-                f"{fmt_person(a_id)} -> {fmt_person(d_id)}"
-            )
-
-        def build_section(title: str, rows: list[str]) -> str:
-            if not rows:
-                return ""
-            return "**" + title + "**\n" + "\n".join(rows)
-
         msg1_lines: list[str] = []
-        msg1_lines.append(f"**Faction attacks today ({today_str})**")
+        msg1_lines.append(f"Faction attacks today ({today_str})")
         msg1_lines.append("")
-        msg1_lines.append("**Summary**")
+        msg1_lines.append("Summary")
         msg1_lines.append(f"• Total: {len(today_attacks)}")
         msg1_lines.append(f"• Hospitals: {len(hosp)}")
         msg1_lines.append(f"• Mugs: {len(mugs)}")
         msg1_lines.append(f"• Respect: {fmt_signed(total_rg)} / {fmt_signed(-total_rl)}")
         msg1_lines.append("")
-        msg1_lines.append("**Top respect earners**")
+        msg1_lines.append("Top respect earners")
 
         if top24:
             msg1_lines.append("• 24 hours:")
+            msg1_lines.append("")
             for tid, val in top24:
                 nm = name_map.get(tid)
                 who = profile_link(nm, tid) if nm else f"`{tid}`"
-                msg1_lines.append(f"  - {who}: `{val:+.2f}`")
+                msg1_lines.append(f"{who}: `{val:+.2f}`")
         else:
             msg1_lines.append("• 24 hours: (no data)")
 
         if top7d:
             msg1_lines.append("• 7 days:")
+            msg1_lines.append("")
             for tid, val in top7d:
                 nm = name_map.get(tid)
                 who = profile_link(nm, tid) if nm else f"`{tid}`"
-                msg1_lines.append(f"  - {who}: `{val:+.2f}`")
+                msg1_lines.append(f"{who}: `{val:+.2f}`")
         else:
             msg1_lines.append("• 7 days: (no data)")
 
         await interaction.followup.send("\n".join(msg1_lines)[:1900])
-
-        sections: list[str] = []
-
-        if hosp:
-            sections.append(build_section("Hospitals", [fmt_attack_line(a) for a in hosp]))
-
-        if mugs_sorted:
-            sections.append(build_section("Mugs (top 10 by respect gain)", [fmt_attack_line(a) for a in mugs_sorted[:10]]))
-
-        if other_sorted:
-            sections.append(build_section("Other (top 10 by respect gain)", [fmt_attack_line(a) for a in other_sorted[:10]]))
-
-        MAX = 1900
-        for sec in sections:
-            if not sec:
-                continue
-
-            if len(sec) <= MAX:
-                await interaction.followup.send(sec)
-                continue
-
-            lines = sec.split("\n")
-            cur = ""
-            for ln in lines:
-                if len(cur) + len(ln) + 1 > MAX:
-                    await interaction.followup.send(cur.rstrip())
-                    cur = ""
-                cur += ln + "\n"
-            if cur.strip():
-                await interaction.followup.send(cur.rstrip())
