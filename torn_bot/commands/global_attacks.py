@@ -158,34 +158,34 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
             return f"`{tid}`"
 
         msg1_lines: list[str] = []
-        msg1_lines.append(f"Faction attacks today ({today_str})")
+        msg1_lines.append(f"**Faction attacks today ({today_str})**")
         msg1_lines.append("")
-        msg1_lines.append("Summary")
-        msg1_lines.append(f"• Total: {len(today_attacks)}")
+        msg1_lines.append("**Summary**")
+        msg1_lines.append(f"• Attacks: {len(today_attacks)}")
         msg1_lines.append(f"• Hospitals: {len(hosp)}")
         msg1_lines.append(f"• Mugs: {len(mugs)}")
         msg1_lines.append(f"• Respect: {fmt_signed(total_rg)} / {fmt_signed(-total_rl)}")
         msg1_lines.append("")
-        msg1_lines.append("Top respect earners")
+        msg1_lines.append("**Top respect earners**")
 
         if top24:
             msg1_lines.append("")
-            msg1_lines.append("24 hours:")
+            msg1_lines.append("**24 hours:**")
             for tid, val in top24:
                 nm = name_map.get(tid)
                 who = profile_link(nm, tid) if nm else f"`{tid}`"
                 msg1_lines.append(f"{who}: `{val:+.2f}`")
         else:
-            msg1_lines.append("24 hours: (no data)")
+            msg1_lines.append("**24 hours:** (no data)")
 
         if top7d:
             msg1_lines.append("")
-            msg1_lines.append("7 days:")
+            msg1_lines.append("**7 days:**")
             for tid, val in top7d:
                 nm = name_map.get(tid)
                 who = profile_link(nm, tid) if nm else f"`{tid}`"
                 msg1_lines.append(f"{who}: `{val:+.2f}`")
         else:
-            msg1_lines.append("7 days: (no data)")
+            msg1_lines.append("**7 days:** (no data)")
 
         await interaction.followup.send("\n".join(msg1_lines)[:1900])
