@@ -21,3 +21,19 @@ def is_owner(user_id: int) -> bool:
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "").strip()
 ENCRYPTION_KEY_FILE = str(BASE_DIR / "encryption.key")
+
+
+def _int_env(name: str, default: int) -> int:
+    val = os.getenv(name, "")
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        return default
+
+
+FACTION_LEADERBOARD_CHANNEL_ID = _int_env(
+    "FACTION_LEADERBOARD_CHANNEL_ID",
+    1459194617139564636,
+)
