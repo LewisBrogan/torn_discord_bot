@@ -72,8 +72,7 @@ def setup_faction_inactive_commands(tree: app_commands.CommandTree, storage: Key
         inactive.sort(key=lambda row: row[0])
 
         header_lines = [
-            "**Inactive Faction Members (24 hours)**",
-            f"**Total inactive:** {len(inactive)} / {len(members)}",
+            f"**Total inactive members (24 hours):** {len(inactive)} / {len(members)}",
         ]
 
         if not inactive:
