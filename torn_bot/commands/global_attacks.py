@@ -28,7 +28,10 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
         description="Show today's faction attacks with useful summaries (London time)."
     )
     async def global_faction_attacks(interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        try:
+            await interaction.response.defer(ephemeral=False)
+        except discord.NotFound:
+            return
 
         api_key = storage.get_global_key("faction") or storage.get_key(interaction.user.id)
         if not api_key:
