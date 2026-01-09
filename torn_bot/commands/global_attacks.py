@@ -169,6 +169,7 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
         msg1_lines.append("Top respect earners")
 
         if top24:
+            msg1_lines.append("")
             msg1_lines.append("24 hours:")
             for tid, val in top24:
                 nm = name_map.get(tid)
@@ -178,6 +179,7 @@ def setup_global_attacks_command(tree: app_commands.CommandTree, storage: KeySto
             msg1_lines.append("24 hours: (no data)")
 
         if top7d:
+            msg1_lines.append("")
             msg1_lines.append("7 days:")
             for tid, val in top7d:
                 nm = name_map.get(tid)
