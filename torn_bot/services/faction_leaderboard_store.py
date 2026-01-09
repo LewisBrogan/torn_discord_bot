@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
+import json
 
 from torn_bot.db import get_conn, init_db
 from torn_bot.api.torn_v2 import fetch_torn_v2
@@ -37,20 +38,86 @@ def _apply_attack(
     started: int,
     attack_id: int,
     *,
+    ended: Optional[int],
+    result: Optional[str],
     is_mug: int,
     is_hosp: int,
     respect_gain: float,
     respect_loss: float,
     mugged: float,
+    attacker_name: Optional[str],
+    defender_id: Optional[int],
+    defender_name: Optional[str],
+    raw_json: Optional[str],
 ) -> bool:
     conn = get_conn()
-    cur = conn.execute(
-        "INSERT OR IGNORE INTO faction_attacks_seen (attack_id, attacker_id, started) VALUES (?, ?, ?)",
-        (attack_id, attacker_id, started),
-    )
-    if cur.rowcount == 0:
+    cur = conn.execute("SELECT 1 FROM faction_attacks_seen WHERE attack_id = ?", (attack_id,))
+    if cur.fetchone():
+        conn.execute(
+            """
+            UPDATE faction_attacks_seen
+            SET attacker_id = COALESCE(?, attacker_id),
+                started = COALESCE(?, started),
+                ended = COALESCE(?, ended),
+                result = COALESCE(?, result),
+                respect_gain = COALESCE(?, respect_gain),
+                respect_loss = COALESCE(?, respect_loss),
+                attacker_name = COALESCE(?, attacker_name),
+                defender_id = COALESCE(?, defender_id),
+                defender_name = COALESCE(?, defender_name),
+                raw_json = COALESCE(?, raw_json)
+            WHERE attack_id = ?
+            """,
+            (
+                attacker_id,
+                started,
+                ended,
+                result,
+                respect_gain,
+                respect_loss,
+                attacker_name,
+                defender_id,
+                defender_name,
+                raw_json,
+                attack_id,
+            ),
+        )
+        conn.commit()
         conn.close()
         return False
+
+    conn.execute(
+        """
+        INSERT INTO faction_attacks_seen
+            (
+                attack_id,
+                attacker_id,
+                started,
+                ended,
+                result,
+                respect_gain,
+                respect_loss,
+                attacker_name,
+                defender_id,
+                defender_name,
+                raw_json
+            )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            attack_id,
+            attacker_id,
+            started,
+            ended,
+            result,
+            respect_gain,
+            respect_loss,
+            attacker_name,
+            defender_id,
+            defender_name,
+            raw_json,
+        ),
+    )
 
     conn.execute(
         """
@@ -90,6 +157,8 @@ async def sync_faction_attacks(api_key: str) -> Dict[str, Any]:
 
     last_sync = _get_meta("leaderboard_last_sync_started")
     since_utc = max(0, int(last_sync) - RECENT_SYNC_LOOKBACK_SECONDS) if last_sync else 0
+    added_samples: list[dict[str, Any]] = []
+    sample_limit = 5
 
     def to_float(x) -> float:
         try:
@@ -118,12 +187,24 @@ async def sync_faction_attacks(api_key: str) -> Dict[str, Any]:
         try:
             attack_id = int(a.get("id", 0) or 0)
             started = int(a.get("started", 0) or 0)
-            attacker_id = int((a.get("attacker") or {}).get("id", 0) or 0)
+            ended = int(a.get("ended", 0) or 0)
+            attacker = a.get("attacker") or {}
+            defender = a.get("defender") or {}
+            attacker_id = int(attacker.get("id", 0) or 0)
+            defender_id = int(defender.get("id", 0) or 0)
         except Exception:
             return False
 
         if not attack_id or not attacker_id or not started:
             return False
+
+        def clean_str(val) -> Optional[str]:
+            if val is None:
+                return None
+            if isinstance(val, str):
+                s = val.strip()
+                return s if s else None
+            return str(val)
 
         res_l = str(a.get("result", "") or "").lower()
         is_mug = 1 if "mug" in res_l else 0
@@ -134,11 +215,17 @@ async def sync_faction_attacks(api_key: str) -> Dict[str, Any]:
             attacker_id,
             started,
             attack_id,
+            ended=ended or None,
+            result=clean_str(a.get("result")),
             is_mug=is_mug,
             is_hosp=is_hosp,
             respect_gain=to_float(a.get("respect_gain", 0)),
             respect_loss=to_float(a.get("respect_loss", 0)),
             mugged=mugged,
+            attacker_name=clean_str(attacker.get("name")),
+            defender_id=defender_id or None,
+            defender_name=clean_str(defender.get("name")),
+            raw_json=json.dumps(a, separators=(",", ":"), ensure_ascii=True),
         )
 
     added = 0
@@ -160,6 +247,16 @@ async def sync_faction_attacks(api_key: str) -> Dict[str, Any]:
                 max_started = started
             if min_started == 0 or started < min_started:
                 min_started = started
+            if len(added_samples) < sample_limit:
+                attacker = a.get("attacker") or {}
+                added_samples.append(
+                    {
+                        "attack_id": int(a.get("id", 0) or 0),
+                        "attacker_id": int(attacker.get("id", 0) or 0),
+                        "attacker_name": attacker.get("name"),
+                        "started": started,
+                    }
+                )
 
     backfill_done = _get_meta("leaderboard_backfill_done") == "1"
     backfill_to = _get_meta("leaderboard_backfill_to")
@@ -184,6 +281,16 @@ async def sync_faction_attacks(api_key: str) -> Dict[str, Any]:
                         max_started = started
                     if min_started == 0 or started < min_started:
                         min_started = started
+                    if len(added_samples) < sample_limit:
+                        attacker = a.get("attacker") or {}
+                        added_samples.append(
+                            {
+                                "attack_id": int(a.get("id", 0) or 0),
+                                "attacker_id": int(attacker.get("id", 0) or 0),
+                                "attacker_name": attacker.get("name"),
+                                "started": started,
+                            }
+                        )
 
             to_param = int(attacks[-1].get("ended", 0) or 0)
             if not to_param:
@@ -205,6 +312,11 @@ async def sync_faction_attacks(api_key: str) -> Dict[str, Any]:
     return {
         "added": added,
         "backfill_done": backfill_done,
+        "max_started": max_started or None,
+        "min_started": min_started or None,
+        "backfill_to": to_param,
+        "tracked_since": _get_meta("leaderboard_tracked_since"),
+        "added_samples": added_samples,
     }
 
 

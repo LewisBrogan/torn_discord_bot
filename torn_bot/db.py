@@ -25,7 +25,15 @@ CREATE TABLE IF NOT EXISTS global_keys (
 CREATE TABLE IF NOT EXISTS faction_attacks_seen (
   attack_id INTEGER PRIMARY KEY,
   attacker_id INTEGER NOT NULL,
-  started INTEGER NOT NULL
+  started INTEGER NOT NULL,
+  ended INTEGER,
+  result TEXT,
+  respect_gain REAL,
+  respect_loss REAL,
+  attacker_name TEXT,
+  defender_id INTEGER,
+  defender_name TEXT,
+  raw_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS faction_leaderboard_totals (
@@ -54,5 +62,21 @@ def get_conn() -> sqlite3.Connection:
 def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA)
+    existing_cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(faction_attacks_seen)")
+    }
+    missing = [
+        ("ended", "INTEGER"),
+        ("result", "TEXT"),
+        ("respect_gain", "REAL"),
+        ("respect_loss", "REAL"),
+        ("attacker_name", "TEXT"),
+        ("defender_id", "INTEGER"),
+        ("defender_name", "TEXT"),
+        ("raw_json", "TEXT"),
+    ]
+    for col, col_type in missing:
+        if col not in existing_cols:
+            conn.execute(f"ALTER TABLE faction_attacks_seen ADD COLUMN {col} {col_type}")
     conn.commit()
     conn.close()
