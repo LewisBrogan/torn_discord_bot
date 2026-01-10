@@ -22,7 +22,12 @@ from torn_bot.services.faction_leaderboard_store import (
 from torn_bot.services.name_resolver import resolve_names
 
 
-async def build_faction_leaderboard_daily_message(api_key: str) -> str:
+async def build_faction_leaderboard_daily_message(
+    api_key: str,
+    *,
+    include_backfill_status: bool = True,
+    include_no_attacks_line: bool = True,
+) -> str:
     today_attacks = []
     today_error = None
     sync_error = None
@@ -42,9 +47,6 @@ async def build_faction_leaderboard_daily_message(api_key: str) -> str:
         sync_error = str(e)
 
     today_str = datetime.now(tz=LONDON).strftime("%d/%m/%y")
-
-    if not today_attacks and not sync_error and not today_error:
-        return f"**Faction leaderboard today ({today_str})**\n\nNo attacks found."
 
     def safe_str(x) -> str:
         if x is None:
@@ -110,16 +112,14 @@ async def build_faction_leaderboard_daily_message(api_key: str) -> str:
         stats[aid]["rg"] += to_float(a.get("respect_gain", 0))
         stats[aid]["rl"] += to_float(a.get("respect_loss", 0))
 
-    if not stats and not today_error:
-        return f"**Faction leaderboard today ({today_str})**\n\nNo attacks found."
-
     def top_by(key: str):
         return max(stats.items(), key=lambda kv: kv[1][key])
 
-    most_attacks_id, most_attacks = top_by("attacks")
-    most_mugs_id, most_mugs = top_by("mugs")
-    most_hosp_id, most_hosp = top_by("hosp")
-    most_rg_id, most_rg = top_by("rg")
+    if stats:
+        most_attacks_id, most_attacks = top_by("attacks")
+        most_mugs_id, most_mugs = top_by("mugs")
+        most_hosp_id, most_hosp = top_by("hosp")
+        most_rg_id, most_rg = top_by("rg")
 
     overall = get_overall_leaderboard()
     overall_ids = set()
@@ -128,15 +128,16 @@ async def build_faction_leaderboard_daily_message(api_key: str) -> str:
         if row and row[0]:
             overall_ids.add(int(row[0]))
 
-    ids_to_resolve = {
-        most_attacks_id,
-        most_mugs_id,
-        most_hosp_id,
-        most_rg_id,
-    }
-    if best_mug_id:
-        ids_to_resolve.add(best_mug_id)
-    ids_to_resolve |= overall_ids
+    ids_to_resolve = set(overall_ids)
+    if stats:
+        ids_to_resolve |= {
+            most_attacks_id,
+            most_mugs_id,
+            most_hosp_id,
+            most_rg_id,
+        }
+        if best_mug_id:
+            ids_to_resolve.add(best_mug_id)
 
     seeded: dict[int, str] = {}
     for a in today_attacks:
@@ -182,16 +183,27 @@ async def build_faction_leaderboard_daily_message(api_key: str) -> str:
             overall_lines.append(f"Tracked since: {dt.strftime('%d/%m/%y %H:%M')}")
         except Exception:
             overall_lines.append(f"Tracked since: {tracked_since}")
-    if overall.get("backfill_done"):
-        overall_lines.append("Backfill from faction data complete")
-    else:
-        overall_lines.append("Backfill status (in progress)")
+    if include_backfill_status:
+        if overall.get("backfill_done"):
+            overall_lines.append("Backfill from faction data complete")
+        else:
+            overall_lines.append("Backfill status (in progress)")
 
     if today_error:
         today_lines = [
             f"**Faction Leaderboard Today ({today_str})**",
             "",
             f"Today data unavailable: {today_error}",
+        ]
+    elif not stats and include_no_attacks_line:
+        today_lines = [
+            f"**Faction Leaderboard Today ({today_str})**",
+            "",
+            "No attacks found today.",
+        ]
+    elif not stats:
+        today_lines = [
+            f"**Faction Leaderboard Today ({today_str})**",
         ]
     else:
         today_lines = [

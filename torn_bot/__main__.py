@@ -30,38 +30,60 @@ def main():
         now = datetime.now(tz=LONDON).strftime("%Y-%m-%d %H:%M:%S")
         print(f"{now} {msg}")
 
-    async def run_midnight_leaderboard() -> None:
+    async def get_leaderboard_channel():
         if not FACTION_LEADERBOARD_CHANNEL_ID:
-            log("midnight leaderboard skipped: no channel id configured")
+            return None
+        channel = client.get_channel(FACTION_LEADERBOARD_CHANNEL_ID)
+        if channel is not None:
+            return channel
+        try:
+            return await client.fetch_channel(FACTION_LEADERBOARD_CHANNEL_ID)
+        except Exception:
+            return None
+
+    async def maybe_post_daily_leaderboard() -> None:
+        now = datetime.now(tz=LONDON)
+        if (now.hour, now.minute) < (23, 55):
+            return
+        api_key = storage.get_global_key("faction")
+        if not api_key:
+            log("daily leaderboard skipped: no global faction API key")
+            return
+        channel = await get_leaderboard_channel()
+        if channel is None:
+            log("daily leaderboard skipped: channel not accessible")
+            return
+        try:
+            msg = await build_faction_leaderboard_daily_message(
+                api_key,
+                include_backfill_status=False,
+                include_no_attacks_line=False,
+            )
+        except Exception as e:
+            log(f"daily leaderboard failed: {e}")
+            return
+        try:
+            msg = "## Daily Summary\n\n" + msg
+            await channel.send(msg)
+            log(f"daily leaderboard sent to channel {FACTION_LEADERBOARD_CHANNEL_ID}")
+        except Exception as e:
+            log(f"daily leaderboard send failed: {e}")
+
+    async def run_daily_leaderboard() -> None:
+        if not FACTION_LEADERBOARD_CHANNEL_ID:
+            log("daily leaderboard skipped: no channel id configured")
             return
         while not client.is_closed():
             now = datetime.now(tz=LONDON)
-            next_midnight = (now + timedelta(days=1)).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-            sleep_s = max(1.0, (next_midnight - now).total_seconds())
-            log(f"midnight leaderboard sleeping until {next_midnight.strftime('%Y-%m-%d %H:%M:%S')}")
+            next_run = now.replace(hour=23, minute=55, second=0, microsecond=0)
+            if now >= next_run:
+                next_run = next_run + timedelta(days=1)
+            sleep_s = max(1.0, (next_run - now).total_seconds())
+            log(f"daily leaderboard sleeping until {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
             await asyncio.sleep(sleep_s)
             if client.is_closed():
                 return
-            api_key = storage.get_global_key("faction")
-            if not api_key:
-                log("midnight leaderboard skipped: no global faction API key")
-                continue
-            try:
-                msg = await build_faction_leaderboard_daily_message(api_key)
-            except Exception as e:
-                log(f"midnight leaderboard failed: {e}")
-                continue
-            try:
-                msg = "## Midnight Announcement - Daily\n\n" + msg
-                channel = client.get_channel(FACTION_LEADERBOARD_CHANNEL_ID)
-                if channel is None:
-                    channel = await client.fetch_channel(FACTION_LEADERBOARD_CHANNEL_ID)
-                await channel.send(msg)
-                log(f"midnight leaderboard sent to channel {FACTION_LEADERBOARD_CHANNEL_ID}")
-            except Exception as e:
-                log(f"midnight leaderboard send failed: {e}")
+            await maybe_post_daily_leaderboard()
 
     @tasks.loop(hours=1)
     async def leaderboard_sync_task():
@@ -82,16 +104,16 @@ def main():
             duration = (datetime.now(tz=LONDON) - start).total_seconds()
             log(f"leaderboard sync failed: {e} duration_s={duration:.2f}")
 
-    midnight_task = None
+    daily_task = None
 
     @client.event
     async def on_ready():
-        nonlocal midnight_task
+        nonlocal daily_task
         await tree.sync()
         if not leaderboard_sync_task.is_running():
             leaderboard_sync_task.start()
-        if midnight_task is None or midnight_task.done():
-            midnight_task = client.loop.create_task(run_midnight_leaderboard())
+        if daily_task is None or daily_task.done():
+            daily_task = client.loop.create_task(run_daily_leaderboard())
         log(f"bot ready - {client.user}")
 
     client.run(DISCORD_TOKEN)
