@@ -97,73 +97,74 @@ def setup_targets_commands(tree: app_commands.CommandTree, storage: KeyStorage):
             return
 
         rows = []
-        for torn_id in target_ids:
-            try:
-                profile_data = await fetch_torn_api("user", "profile", api_key, torn_id)
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for torn_id in target_ids:
+                try:
+                    profile_data = await fetch_torn_api("user", "profile", api_key, torn_id)
 
-                stats_url = f"{TORN_API_BASE}/user/{torn_id}"
-                stats_params = {
-                    "selections": "personalstats",
-                    "stat": "xantaken,refills,statenhancersused,energydrinkused",
-                    "key": api_key
-                }
-                async with aiohttp.ClientSession() as session:
+                    stats_url = f"{TORN_API_BASE}/user/{torn_id}"
+                    stats_params = {
+                        "selections": "personalstats",
+                        "stat": "xantaken,refills,statenhancersused,energydrinkused",
+                        "key": api_key
+                    }
                     async with session.get(stats_url, params=stats_params) as resp:
                         stats_data = await resp.json()
 
-                pstats = stats_data.get("personalstats", {}) or {}
+                    pstats = stats_data.get("personalstats", {}) or {}
 
-                name = profile_data.get("name", "Unknown")
-                level = profile_data.get("level", 0)
-                age = profile_data.get("age", 0)
+                    name = profile_data.get("name", "Unknown")
+                    level = profile_data.get("level", 0)
+                    age = profile_data.get("age", 0)
 
-                status_state = (profile_data.get("status") or {}).get("state", "?")
-                life = profile_data.get("life", {}) or {}
-                life_current = life.get("current", 0)
-                life_max = life.get("maximum", 0)
+                    status_state = (profile_data.get("status") or {}).get("state", "?")
+                    life = profile_data.get("life", {}) or {}
+                    life_current = life.get("current", 0)
+                    life_max = life.get("maximum", 0)
 
-                last_rel = (profile_data.get("last_action") or {}).get("relative", "?")
+                    last_rel = (profile_data.get("last_action") or {}).get("relative", "?")
 
-                xanax = pstats.get("xantaken", 0) or 0
-                refills = pstats.get("refills", 0) or 0
-                se_used = pstats.get("statenhancersused", 0) or 0
-                ecans = pstats.get("energydrinkused", 0) or 0
+                    xanax = pstats.get("xantaken", 0) or 0
+                    refills = pstats.get("refills", 0) or 0
+                    se_used = pstats.get("statenhancersused", 0) or 0
+                    ecans = pstats.get("energydrinkused", 0) or 0
 
-                status_icon = {
-                    "Okay": "OK",
-                    "Hospital": "HOSP",
-                    "Jail": "JAIL",
-                    "Traveling": "TRVL"
-                }.get(status_state, "?")
+                    status_icon = {
+                        "Okay": "OK",
+                        "Hospital": "HOSP",
+                        "Jail": "JAIL",
+                        "Traveling": "TRVL"
+                    }.get(status_state, "?")
 
-                rows.append({
-                    "name": name,
-                    "id": torn_id,
-                    "lvl": level,
-                    "age": age,
-                    "status": status_icon,
-                    "life": f"{life_current}/{life_max}",
-                    "xan": xanax,
-                    "ref": refills,
-                    "ecan": ecans,
-                    "se": se_used,
-                    "last": last_rel
-                })
+                    rows.append({
+                        "name": name,
+                        "id": torn_id,
+                        "lvl": level,
+                        "age": age,
+                        "status": status_icon,
+                        "life": f"{life_current}/{life_max}",
+                        "xan": xanax,
+                        "ref": refills,
+                        "ecan": ecans,
+                        "se": se_used,
+                        "last": last_rel
+                    })
 
-            except Exception:
-                rows.append({
-                    "name": "???",
-                    "id": torn_id,
-                    "lvl": "?",
-                    "age": "?",
-                    "status": "ERR",
-                    "life": "?",
-                    "xan": "?",
-                    "ref": "?",
-                    "ecan": "?",
-                    "se": "?",
-                    "last": "error"
-                })
+                except Exception:
+                    rows.append({
+                        "name": "???",
+                        "id": torn_id,
+                        "lvl": "?",
+                        "age": "?",
+                        "status": "ERR",
+                        "life": "?",
+                        "xan": "?",
+                        "ref": "?",
+                        "ecan": "?",
+                        "se": "?",
+                        "last": "error"
+                    })
 
         header = "```\n"
         header += f"{'NAME':<15} {'LVL':>4} {'AGE':>5} {'ST':>4} {'LIFE':>11} {'XAN':>5} {'REF':>4} {'ECAN':>5} {'LAST':<12}\n"

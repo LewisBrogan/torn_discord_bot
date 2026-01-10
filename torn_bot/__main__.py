@@ -9,7 +9,12 @@ try:
 except Exception:
     LONDON = timezone.utc
 
-from torn_bot.config import DISCORD_TOKEN, FACTION_LEADERBOARD_CHANNEL_ID
+from torn_bot.config import (
+    DISCORD_TOKEN,
+    FACTION_LEADERBOARD_CHANNEL_ID,
+    DAILY_LEADERBOARD_HOUR,
+    DAILY_LEADERBOARD_MINUTE,
+)
 from torn_bot.storage import KeyStorage
 from torn_bot.commands import setup_all_commands
 from torn_bot.commands.faction_leaderboard_daily import build_faction_leaderboard_daily_message
@@ -27,7 +32,7 @@ def main():
     setup_all_commands(tree, storage)
 
     def log(msg: str) -> None:
-        now = datetime.now(tz=LONDON).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(tz=LONDON).strftime("%d %m %y %H:%M:%S")
         print(f"{now} {msg}")
 
     async def get_leaderboard_channel():
@@ -43,7 +48,7 @@ def main():
 
     async def maybe_post_daily_leaderboard() -> None:
         now = datetime.now(tz=LONDON)
-        if (now.hour, now.minute) < (23, 55):
+        if (now.hour, now.minute) < (DAILY_LEADERBOARD_HOUR, DAILY_LEADERBOARD_MINUTE):
             return
         api_key = storage.get_global_key("faction")
         if not api_key:
@@ -75,11 +80,16 @@ def main():
             return
         while not client.is_closed():
             now = datetime.now(tz=LONDON)
-            next_run = now.replace(hour=23, minute=55, second=0, microsecond=0)
+            next_run = now.replace(
+                hour=DAILY_LEADERBOARD_HOUR,
+                minute=DAILY_LEADERBOARD_MINUTE,
+                second=0,
+                microsecond=0,
+            )
             if now >= next_run:
                 next_run = next_run + timedelta(days=1)
             sleep_s = max(1.0, (next_run - now).total_seconds())
-            log(f"daily leaderboard sleeping until {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
+            log(f"daily leaderboard sleeping until {next_run.strftime('%d %m %y %H:%M:%S')}")
             await asyncio.sleep(sleep_s)
             if client.is_closed():
                 return
@@ -114,7 +124,22 @@ def main():
             leaderboard_sync_task.start()
         if daily_task is None or daily_task.done():
             daily_task = client.loop.create_task(run_daily_leaderboard())
-        log(f"bot ready - {client.user}")
+        api_key = storage.get_global_key("faction")
+        if not api_key:
+            log("startup check: no global faction API key set")
+        if FACTION_LEADERBOARD_CHANNEL_ID:
+            channel = await get_leaderboard_channel()
+            if channel is None:
+                log(f"startup check: channel {FACTION_LEADERBOARD_CHANNEL_ID} not accessible")
+            else:
+                log(f"startup check: channel {FACTION_LEADERBOARD_CHANNEL_ID} ok")
+        else:
+            log("startup check: no daily leaderboard channel configured")
+        log(
+            "bot ready - "
+            f"{client.user} daily_time={DAILY_LEADERBOARD_HOUR:02d}:{DAILY_LEADERBOARD_MINUTE:02d} "
+            f"channel_id={FACTION_LEADERBOARD_CHANNEL_ID}"
+        )
 
     client.run(DISCORD_TOKEN)
 

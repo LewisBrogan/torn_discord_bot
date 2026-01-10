@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS faction_leaderboard_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_faction_attacks_seen_started
+  ON faction_attacks_seen (started);
+CREATE INDEX IF NOT EXISTS idx_faction_attacks_seen_attacker
+  ON faction_attacks_seen (attacker_id);
 """
 
 

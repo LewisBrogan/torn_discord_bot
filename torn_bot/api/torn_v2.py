@@ -1,6 +1,7 @@
 from __future__ import annotations
 import aiohttp
 from typing import Optional, Dict, Any
+import asyncio
 
 TORN_V2_BASE = "https://api.torn.com/v2"
 
@@ -35,14 +36,33 @@ async def fetch_torn_v2(
     q = dict(params or {})
     q["key"] = api_key
 
-    async with session.get(url, params=q) as resp:
-        data = await resp.json()
+    backoffs = [0.5, 1.0, 2.0]
+    last_err: Exception | None = None
 
-    if isinstance(data, dict) and "error" in data:
-        err = data["error"]
-        raise TornAPIError(int(err.get("code", 0)), err.get("error", "unknwn error"))
+    for i in range(len(backoffs) + 1):
+        try:
+            async with session.get(url, params=q) as resp:
+                if resp.status == 429 or resp.status >= 500:
+                    raise TornAPIError(resp.status, f"http {resp.status}")
+                data = await resp.json()
+            if isinstance(data, dict) and "error" in data:
+                err = data["error"]
+                raise TornAPIError(int(err.get("code", 0)), err.get("error", "unknwn error"))
+            return data
+        except TornAPIError as e:
+            last_err = e
+            if i >= len(backoffs):
+                break
+            await asyncio.sleep(backoffs[i])
+        except Exception as e:
+            last_err = e
+            if i >= len(backoffs):
+                break
+            await asyncio.sleep(backoffs[i])
 
-    return data
+    if isinstance(last_err, TornAPIError):
+        raise last_err
+    raise TornAPIError(0, f"request failed: {last_err}")
 
 
 async def close_v2_session() -> None:

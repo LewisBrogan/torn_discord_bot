@@ -11,6 +11,18 @@ class TornAPIError(Exception):
         super().__init__(f"Torn API Error {code}: {message}")
 
 
+_HTTP_SESSION: aiohttp.ClientSession | None = None
+
+
+async def get_session() -> aiohttp.ClientSession:
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None or _HTTP_SESSION.closed:
+        _HTTP_SESSION = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=20)
+        )
+    return _HTTP_SESSION
+
+
 async def fetch_torn_api(
     endpoint: str,
     selections: str,
@@ -27,12 +39,18 @@ async def fetch_torn_api(
     if extra_params:
         params.update(extra_params)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params) as resp:
-            data = await resp.json()
+    session = await get_session()
+    async with session.get(url, params=params) as resp:
+        data = await resp.json()
 
     if isinstance(data, dict) and "error" in data:
         err = data["error"]
         raise TornAPIError(err.get("code", 0), err.get("error", "Unknown error"))
 
     return data
+
+
+async def close_api_session() -> None:
+    global _HTTP_SESSION
+    if _HTTP_SESSION and not _HTTP_SESSION.closed:
+        await _HTTP_SESSION.close()
