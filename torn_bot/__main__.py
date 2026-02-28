@@ -19,6 +19,7 @@ from torn_bot.storage import KeyStorage
 from torn_bot.commands import setup_all_commands
 from torn_bot.commands.faction_leaderboard_daily import build_faction_leaderboard_daily_message
 from torn_bot.services.faction_leaderboard_store import sync_faction_attacks
+from torn_bot.services.flight_watch import run_flight_watch_loop
 
 def main():
     if not DISCORD_TOKEN:
@@ -115,15 +116,18 @@ def main():
             log(f"leaderboard sync failed: {e} duration_s={duration:.2f}")
 
     daily_task = None
+    flight_task = None
 
     @client.event
     async def on_ready():
-        nonlocal daily_task
+        nonlocal daily_task, flight_task
         await tree.sync()
         if not leaderboard_sync_task.is_running():
             leaderboard_sync_task.start()
         if daily_task is None or daily_task.done():
             daily_task = client.loop.create_task(run_daily_leaderboard())
+        if flight_task is None or flight_task.done():
+            flight_task = client.loop.create_task(run_flight_watch_loop(client, storage))
         api_key = storage.get_global_key("faction")
         if not api_key:
             log("startup check: no global faction API key set")

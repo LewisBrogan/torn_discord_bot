@@ -7,6 +7,9 @@ from torn_bot.config import ENCRYPTION_KEY, ENCRYPTION_KEY_FILE
 from torn_bot.db import init_db, get_conn
 
 
+GLOBAL_VIP_OWNER_ID = 0
+
+
 class KeyStorage:
     def __init__(self):
         self.encryption_key = self._get_or_create_encryption_key()
@@ -93,6 +96,50 @@ class KeyStorage:
         conn.commit()
         conn.close()
         return count
+
+    def add_vip_target(self, torn_id: int, notes: Optional[str]) -> str:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO vip_targets (discord_id, torn_id, notes) VALUES (?, ?, ?)",
+                (GLOBAL_VIP_OWNER_ID, torn_id, notes),
+            )
+            conn.commit()
+            conn.close()
+            return "added"
+        except sqlite3.IntegrityError:
+            if notes is not None:
+                conn.execute(
+                    "UPDATE vip_targets SET notes = ? WHERE discord_id = ? AND torn_id = ?",
+                    (notes, GLOBAL_VIP_OWNER_ID, torn_id),
+                )
+                conn.commit()
+                conn.close()
+                return "updated"
+            conn.close()
+            return "exists"
+
+    def remove_vip_target(self, torn_id: int) -> bool:
+        conn = get_conn()
+        cur = conn.execute(
+            "DELETE FROM vip_targets WHERE discord_id = ? AND torn_id = ?",
+            (GLOBAL_VIP_OWNER_ID, torn_id),
+        )
+        deleted = cur.rowcount > 0
+        conn.commit()
+        conn.close()
+        return deleted
+
+    def get_vip_targets(self) -> List[tuple[int, Optional[str]]]:
+        conn = get_conn()
+        cur = conn.execute(
+            "SELECT torn_id, notes FROM vip_targets WHERE discord_id = ? ORDER BY added_at",
+            (GLOBAL_VIP_OWNER_ID,),
+        )
+        rows = [(r[0], r[1]) for r in cur.fetchall()]
+        conn.close()
+        return rows
+
     def store_global_key(self, name: str, api_key: str) -> None:
         encrypted = self.cipher.encrypt(api_key.encode()).decode()
         conn = get_conn()

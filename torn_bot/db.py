@@ -16,6 +16,15 @@ CREATE TABLE IF NOT EXISTS targets (
   UNIQUE(discord_id, torn_id)
 );
 
+CREATE TABLE IF NOT EXISTS vip_targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  discord_id INTEGER NOT NULL,
+  torn_id INTEGER NOT NULL,
+  notes TEXT,
+  added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(discord_id, torn_id)
+);
+
 CREATE TABLE IF NOT EXISTS global_keys (
   name TEXT PRIMARY KEY,
   encrypted_key TEXT NOT NULL,
